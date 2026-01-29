@@ -91,6 +91,62 @@ systemctl --user daemon-reload
 systemctl --user enable --now swtmp
 ```
 
+
+If you want your launch script to explicitly use the socket directory **`~/tpm/swtpm-sock`**, you can wrap `swtpm` so it always starts with that path and creates the socket there.
+
+Below is a clean, reliable script that does exactly that.
+
 ---
 
-If you want, I can tailor the script to your exact environment — WSL2, Ubuntu, systemd‑enabled WSL, or even Windows Task Scheduler.
+## 🟦 `launch-swtpm.sh` (recommended)
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Directory where the swtpm socket will live
+SOCK_DIR="$HOME/tpm/swtpm-sock"
+
+# Ensure the directory exists
+mkdir -p "$SOCK_DIR"
+
+# Path to swtpm binary
+SWTMP_BIN="$(command -v swtpm || true)"
+
+if [[ -z "$SWTMP_BIN" ]]; then
+    echo "Error: swtpm not found in PATH" >&2
+    exit 1
+fi
+
+# Launch swtpm with a UNIX socket in the specified directory
+exec "$SWTMP_BIN" socket \
+    --tpmstate dir="$SOCK_DIR" \
+    --ctrl type=unixio,path="$SOCK_DIR/swtpm-control.sock" \
+    --server type=unixio,path="$SOCK_DIR/swtpm.sock" \
+    --flags not-need-init \
+    "$@"
+```
+
+---
+
+## 🟩 Make it executable
+
+```bash
+chmod +x launch-swtpm.sh
+```
+
+Run it:
+
+```bash
+./launch-swtpm.sh
+```
+
+---
+
+## 🟧 What this script gives you
+- Ensures `~/tpm/swtpm-sock` exists  
+- Creates both control and TPM sockets inside that directory  
+- Uses `exec` so the script doesn’t leave a wrapper process  
+- Accepts extra arguments (`./launch-swtpm.sh --log-level=20`)  
+
+---
